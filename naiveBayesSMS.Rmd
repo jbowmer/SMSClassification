@@ -1,0 +1,139 @@
+---
+title: "Naive Bayes Spam Classification"
+author: "JB"
+date: "16 March 2015"
+output: html_document
+---
+
+Another example of Niave Bayes, this time on SMS text data and using a pre-prepared dataset. Hopefully this will show the power of using Naive Bayes on text classification a little better than the last example.
+
+Naive Bayes is often used succesfully for email filtering, but SMS data poses additional data - for instance, the 160 character limit, and a SMS shorthand.
+
+#Data Acquisition:
+I've downloaded data from http://www.dt.fee.unicamp.br/~tiago/smsspamcollection/. The data is associated with a publication titled "On the validity of a new SMS spam Collection" by Hidalgo, Almeida and Yamakami. Junk messages are labeled spam, while legitimate messages are labeled ham.
+
+```{r}
+library(tm)
+library(wordcloud)
+library(e1071)
+library(gmodels)
+
+sms_raw <- read.csv("sms_spam.csv", stringsAsFactors = FALSE)
+
+str(sms_raw)
+sms_raw$type = as.factor(sms_raw$type)
+table(sms_raw$type)
+```
+
+Create the corpus using the tm package, clean it using tm transformations.
+
+```{r}
+sms_corpus = Corpus(VectorSource(sms_raw$text))
+sms_corpus = tm_map(sms_corpus, tolower)
+sms_corpus = tm_map(sms_corpus, removePunctuation)
+sms_corpus = tm_map(sms_corpus, removeNumbers)
+sms_corpus = tm_map(sms_corpus, removeWords, stopwords())
+
+#strip whitespace as the last step.
+sms_corpus = tm_map(sms_corpus, stripWhitespace)
+
+```
+
+Quick explanation of tokenisation: A token is a single element of  text string, in this case, the tokens are words. Document Term Matrix takes a corpus and creates a data structure called a sparse matrix, in which the rows of the matrix indicate documents (in this case, text messages) and the columns indicate terms (in this case, words).
+
+```{r}
+sms_dtm = DocumentTermMatrix(sms_corpus)
+```
+
+We take the first 75% for training and leave the last 25% for testing (the texts are randomised in the initial csv).
+
+```{r}
+
+sms_raw_train = sms_raw[1:4169, ]
+sms_raw_test = sms_raw[4170:5559, ]
+
+sms_dtm_train = sms_dtm[1:4169, ]
+sms_dtm_test  = sms_dtm[4170:5559, ]
+
+sms_corpus_train = sms_corpus[1:4169]
+sms_corpus_test  = sms_corpus[4170:5559]
+```
+
+Random wordcloud because all text blog posts are boring:
+```{r}
+wordcloud(sms_corpus_train, min.freq = 40, random.order = FALSE)
+```
+
+Interestingly, the flexibility of the wordcloud package means we can use it to see the difference between the ham and spam wordclouds:
+
+```{r}
+
+spam = subset(sms_raw_train, type == "spam")
+ham = subset(sms_raw_train, type == "ham")
+
+wordcloud(spam$text, max.words = 40, scale = c(3, 0.5))
+wordcloud(ham$text, max.words = 40, scale = c(3, 0.5))
+
+```
+
+Finding frequent terms:
+
+```{r}
+
+head(findFreqTerms(sms_dtm_train, 5))
+#save them in a  dictionary
+sms_dict = (findFreqTerms(sms_dtm_train, 5))
+
+#The dictionary is a data structure that allows us to specify which words should appear in a document term matrix. To limit our training and test matrixes to only the words in the preceding dictionary:
+sms_train <- DocumentTermMatrix(sms_corpus_train,
+    list(dictionary = sms_dict))
+sms_test  <- DocumentTermMatrix(sms_corpus_test,
+    list(dictionary = sms_dict))
+```
+
+The training and test data now includes a number of features that correspond only to words that appear in at least five messages.
+
+Because Naive Bayes is typically trained on data with categorical features, we need to change the sparse matrix (which has counts of the number of times a word appears in a message) to a factor variable which indicates if the word is present or not. In the previous twitter example, we had done this by simply changing all numbers greater than one in the matrix to 1. Here, we use a function:
+
+```{r}
+
+convert_counts = function(x){
+  x = ifelse(x > 0, 1, 0)
+  x = factor(x, levels = c(0,1), labels = c("No", "Yes"))
+  return(x)
+}
+```
+
+We use apply() to use the function on all columns.
+
+```{r}
+sms_train = apply(sms_train, MARGIN = 2, convert_counts)
+sms_test  = apply(sms_test, MARGIN = 2, convert_counts)
+
+```
+
+Train and predict using NB
+
+```{r}
+#The naive bayes classifier takes an  additional argument, laplace = 0 as default.
+sms_classifier = naiveBayes(sms_train, sms_raw_train$type)
+
+sms_test_pred = predict(sms_classifier, sms_test)
+
+#crossTable from the gmodels package to provide a view on how the model performs.
+CrossTable(sms_test_pred, sms_raw_test$type,
+    prop.chisq = FALSE, prop.t = FALSE,
+    dnn = c('predicted', 'actual'))
+```
+
+We can train another classifier using a higher laplace smoothing variable. Just because ringtone only appears in spam messages does not mean that every message with ringtone in it should be classified as spam
+```{r}
+sms_classifier = naiveBayes(sms_train, sms_raw_train$type, laplace = 1)
+
+sms_test_pred = predict(sms_classifier, sms_test)
+
+#crossTable from the gmodels package to provide a view on how the model performs.
+CrossTable(sms_test_pred, sms_raw_test$type,
+    prop.chisq = FALSE, prop.t = FALSE,
+    dnn = c('predicted', 'actual'))
+```
