@@ -7,7 +7,7 @@ output: html_document
 
 Another example of Niave Bayes, this time on SMS text data and using a pre-prepared dataset. Hopefully this will show the power of using Naive Bayes on text classification a little better than the last example.
 
-Naive Bayes is often used succesfully for email filtering, but SMS data poses additional data - for instance, the 160 character limit, and a SMS shorthand.
+Naive Bayes is often used succesfully for email filtering, but SMS data poses additional challenges - for instance, the 160 character limit, and a SMS shorthand.
 
 #Data Acquisition:
 I've downloaded data from http://www.dt.fee.unicamp.br/~tiago/smsspamcollection/. The data is associated with a publication titled "On the validity of a new SMS spam Collection" by Hidalgo, Almeida and Yamakami. Junk messages are labeled spam, while legitimate messages are labeled ham.
